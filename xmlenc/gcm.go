@@ -58,8 +58,6 @@ func (e GCM) Encrypt(key interface{}, plaintext []byte, nonce []byte) (*etree.El
 	em.CreateAttr("Algorithm", e.algorithm)
 	em.CreateAttr("xmlns:xenc", "http://www.w3.org/2001/04/xmlenc#")
 
-	plaintext = appendPadding(plaintext, block.BlockSize())
-
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, err
@@ -67,14 +65,15 @@ func (e GCM) Encrypt(key interface{}, plaintext []byte, nonce []byte) (*etree.El
 
 	if nonce == nil {
 		// generate random nonce when it's nil
-		nonce := make([]byte, aesgcm.NonceSize())
+		nonce = make([]byte, aesgcm.NonceSize())
 		if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-			panic(err.Error())
+			return nil, err
 		}
 	}
 
-	ciphertext := make([]byte, len(plaintext))
-	text := aesgcm.Seal(nil, nonce, ciphertext, nil)
+	// Seal encrypts plaintext and appends the GCM tag; the nonce is prepended
+	// so Decrypt can recover it (it reads ciphertext[:NonceSize()]).
+	text := append(nonce, aesgcm.Seal(nil, nonce, plaintext, nil)...)
 
 	cd := encryptedDataEl.CreateElement("xenc:CipherData")
 	cd.CreateAttr("xmlns:xenc", "http://www.w3.org/2001/04/xmlenc#")
